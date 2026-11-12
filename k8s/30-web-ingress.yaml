@@ -1,0 +1,32 @@
+# TIER 1 - presentation (nginx serves the UI and proxies /api/* to the services)
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: web, namespace: timebank }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: web } }
+  template:
+    metadata: { labels: { app: web, tier: web } }
+    spec:
+      containers:
+        - name: web
+          image: timebank/web:1.0
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8080 }]
+          readinessProbe: { httpGet: { path: /healthz, port: 8080 }, periodSeconds: 5 }
+          resources: { requests: { cpu: 25m, memory: 32Mi }, limits: { memory: 128Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: web, namespace: timebank }
+spec: { selector: { app: web }, ports: [{ port: 80, targetPort: 8080 }] }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: { name: timebank, namespace: timebank }
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: timebank.local
+      http:
+        paths: [{ path: /, pathType: Prefix, backend: { service: { name: web, port: { number: 80 } } } }]

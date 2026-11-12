@@ -1,0 +1,21 @@
+# Quick local run:  docker compose up --build   ->  http://localhost:8080
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment: { POSTGRES_USER: timebank, POSTGRES_PASSWORD: timebank }
+    volumes: ["./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro", "pgdata:/var/lib/postgresql/data"]
+  skills:
+    build: ./skills
+    environment: { DATABASE_URL: "postgresql://timebank:timebank@postgres:5432/skills" }
+    depends_on: [postgres]
+  ledger:
+    build: ./ledger
+    environment:
+      DATABASE_URL: "postgresql://timebank:timebank@postgres:5432/ledger"
+      SKILLS_URL: "http://skills:5001"
+    depends_on: [postgres, skills]
+  web:
+    build: ./web
+    ports: ["8080:8080"]
+    depends_on: [skills, ledger]
+volumes: { pgdata: {} }

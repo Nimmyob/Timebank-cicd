@@ -1,0 +1,2 @@
+CREATE DATABASE skills;
+CREATE DATABASE ledger;

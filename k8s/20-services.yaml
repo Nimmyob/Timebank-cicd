@@ -1,0 +1,71 @@
+# TIER 2 - application microservices
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: skills, namespace: timebank }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: skills } }
+  template:
+    metadata: { labels: { app: skills, tier: app } }
+    spec:
+      containers:
+        - name: skills
+          image: timebank/skills:1.0
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 5001 }]
+          env:
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: db-credentials, key: SKILLS_DATABASE_URL } }
+          readinessProbe: { httpGet: { path: /health, port: 5001 }, initialDelaySeconds: 5, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /health, port: 5001 }, initialDelaySeconds: 20, periodSeconds: 10 }
+          resources: { requests: { cpu: 50m, memory: 96Mi }, limits: { memory: 256Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: skills, namespace: timebank }
+spec: { selector: { app: skills }, ports: [{ port: 5001, targetPort: 5001 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: ledger, namespace: timebank }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: ledger } }
+  template:
+    metadata: { labels: { app: ledger, tier: app } }
+    spec:
+      containers:
+        - name: ledger
+          image: timebank/ledger:1.0
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 5002 }]
+          env:
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: db-credentials, key: LEDGER_DATABASE_URL } }
+            - { name: SKILLS_URL, value: "http://skills:5001" }
+          readinessProbe: { httpGet: { path: /health, port: 5002 }, initialDelaySeconds: 5, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /health, port: 5002 }, initialDelaySeconds: 20, periodSeconds: 10 }
+          resources: { requests: { cpu: 50m, memory: 96Mi }, limits: { memory: 256Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: ledger, namespace: timebank }
+spec: { selector: { app: ledger }, ports: [{ port: 5002, targetPort: 5002 }] }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: skills, namespace: timebank }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: skills }
+  minReplicas: 2
+  maxReplicas: 6
+  metrics: [{ type: Resource, resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } } }]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: ledger, namespace: timebank }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: ledger }
+  minReplicas: 2
+  maxReplicas: 6
+  metrics: [{ type: Resource, resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } } }]
